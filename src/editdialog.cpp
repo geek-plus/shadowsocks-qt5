@@ -12,7 +12,9 @@ EditDialog::EditDialog(Connection *_connection, QWidget *parent) :
     ui->setupUi(this);
 
     /* initialisation and validator setup */
-    ui->encryptComboBox->addItems(SSValidator::supportedMethod);
+    static const QStringList supportedMethodList =
+            SSValidator::supportedMethodList();
+    ui->encryptComboBox->addItems(supportedMethodList);
     IP4Validator *addrValidator = new IP4Validator(this);
     PortValidator *portValidator = new PortValidator(this);
     ui->serverPortEdit->setValidator(portValidator);
@@ -28,7 +30,6 @@ EditDialog::EditDialog(Connection *_connection, QWidget *parent) :
     ui->httpRadioButton->setChecked(connection->profile.httpMode);
     ui->pwdEdit->setText(connection->profile.password);
     ui->encryptComboBox->setCurrentText(connection->profile.method.toUpper());
-    ui->otaCheckBox->setChecked(connection->profile.onetimeAuth);
     ui->timeoutSpinBox->setValue(connection->profile.timeout);
     ui->resetDateEdit->setDate(connection->profile.nextResetDate);
     ui->resetDateEdit->setMinimumDate(QDate::currentDate());
@@ -48,7 +49,7 @@ EditDialog::~EditDialog()
 void EditDialog::save()
 {
     connection->profile.name = ui->nameEdit->text();
-    connection->profile.serverAddress = ui->serverAddrEdit->text();
+    connection->profile.serverAddress = ui->serverAddrEdit->text().trimmed();
     connection->profile.serverPort = ui->serverPortEdit->text().toUShort();
     connection->profile.localAddress = ui->localAddrEdit->text();
     connection->profile.localPort = ui->localPortEdit->text().toUShort();
@@ -59,7 +60,6 @@ void EditDialog::save()
     connection->profile.nextResetDate = ui->resetDateEdit->date();
     connection->profile.autoStart = ui->autoStartCheckBox->isChecked();
     connection->profile.debug = ui->debugCheckBox->isChecked();
-    connection->profile.onetimeAuth = ui->otaCheckBox->isChecked();
 
     this->accept();
 }

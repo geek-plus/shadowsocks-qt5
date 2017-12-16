@@ -1,5 +1,6 @@
 #include "connectionitem.h"
 #include <QFont>
+#include <cmath>
 
 ConnectionItem::ConnectionItem(Connection *_con, QObject *parent) :
     QObject(parent),
@@ -87,13 +88,13 @@ QString ConnectionItem::convertLatencyToString(const int latency)
 {
     QString latencyStr;
     switch (latency) {
-    case -1:
+    case SQProfile::LATENCY_TIMEOUT:
         latencyStr = tr("Timeout");
         break;
-    case -2://error
+    case SQProfile::LATENCY_ERROR:
         latencyStr = tr("Error");
         break;
-    case -3://unknown
+    case SQProfile::LATENCY_UNKNOWN:
         latencyStr = tr("Unknown");
         break;
     default:
@@ -107,12 +108,17 @@ QString ConnectionItem::convertLatencyToString(const int latency)
     return latencyStr;
 }
 
-QString ConnectionItem::convertBytesToHumanReadable(quint64 bytes)
+QString ConnectionItem::convertBytesToHumanReadable(quint64 quot)
 {
     int unitId = 0;
-    for (; bytes > 1024; bytes /= 1024, unitId++);
-    QString str = QString::number(bytes) + bytesUnits.at(unitId);
-    return str;
+    quint64 rem = 0;
+    for (; quot > 1024; ++unitId) {
+        rem = quot % 1024;//the previous rem would be negligible
+        quot /= 1024;
+    }
+    double output = static_cast<double>(quot)
+                  + static_cast<double>(rem) / 1024.0;
+    return QString("%1 %2").arg(output, 0, 'f', 2).arg(bytesUnits.at(unitId));
 }
 
 void ConnectionItem::testLatency()
@@ -136,9 +142,9 @@ void ConnectionItem::onConnectionStateChanged(bool running)
 
 void ConnectionItem::onConnectionPingFinished(const int latency)
 {
-    if (latency == -1) {//TIMEOUT
+    if (latency == SQProfile::LATENCY_TIMEOUT) {
         emit message(con->getName() + " " + tr("timed out"));
-    } else if (latency == -2) {//ERROR
+    } else if (latency == SQProfile::LATENCY_ERROR) {
         emit message(con->getName() + " " + tr("latency test failed"));
     }
 }

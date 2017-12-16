@@ -21,6 +21,7 @@
 
 #include <QMainWindow>
 #include <QSortFilterProxyModel>
+#include <QLocalServer>
 #include "connectiontablemodel.h"
 #include "confighelper.h"
 #include "statusnotifier.h"
@@ -34,20 +35,23 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = 0);
+    explicit MainWindow(ConfigHelper *confHelper, QWidget *parent = 0);
     ~MainWindow();
 
-    bool isOnlyOneInstance() const;
-    bool isHideWindowOnStartup() const;
-
     void startAutoStartConnections();
+    bool isInstanceRunning() const;
 
 private:
+    Ui::MainWindow *ui;
+
     ConnectionTableModel *model;
     QSortFilterProxyModel *proxyModel;
     ConfigHelper *configHelper;
-    Ui::MainWindow *ui;
     StatusNotifier *notifier;
+
+    QLocalServer* instanceServer;
+    bool instanceRunning;
+    void initSingleInstance();
 
     void newProfile(Connection *);
     void editRow(int row);
@@ -60,6 +64,7 @@ private:
 private slots:
     void onImportGuiJson();
     void onExportGuiJson();
+    void onSaveManually();
     void onAddManually();
     void onAddScreenQRCode();
     void onAddScreenQRCodeCapturer();
@@ -74,7 +79,6 @@ private slots:
     void onDisconnect();
     void onConnectionStatusChanged(const int row, const bool running);
     void onLatencyTest();
-    void onViewLog();
     void onMoveUp();
     void onMoveDown();
     void onGeneralSettings();
@@ -85,6 +89,7 @@ private slots:
     void onFilterToggled(bool);
     void onFilterTextChanged(const QString &text);
     void onQRCodeCapturerResultFound(const QString &uri);
+    void onSingleInstanceConnect();
 
 protected slots:
     void hideEvent(QHideEvent *e);

@@ -3,36 +3,28 @@
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QMessageBox>
-#include <QSharedMemory>
 #include <QDebug>
+#include <QDir>
+#include <QCommandLineParser>
 #include <signal.h>
 #include "mainwindow.h"
+#include "confighelper.h"
 
 MainWindow *mainWindow = nullptr;
 
 static void onSignalRecv(int sig)
 {
-#ifdef Q_OS_UNIX
-    if (sig == SIGUSR1) {
-        if (mainWindow) {
-            mainWindow->show();
-        }
+    if (sig == SIGINT || sig == SIGTERM) {
+        qApp->quit();
+    } else {
+        qWarning("Unhandled signal %d", sig);
     }
-#endif
-    if (sig == SIGINT || sig == SIGTERM) qApp->quit();
 }
 
-int main(int argc, char *argv[])
+void setupApplication(QApplication &a)
 {
-    qRegisterMetaTypeStreamOperators<SQProfile>("SQProfile");
-
-    QApplication a(argc, argv);
-
     signal(SIGINT, onSignalRecv);
     signal(SIGTERM, onSignalRecv);
-#ifdef Q_OS_UNIX
-    signal(SIGUSR1, onSignalRecv);
-#endif
 
     a.setApplicationName(QString("shadowsocks-qt5"));
     a.setApplicationDisplayName(QString("Shadowsocks-Qt5"));
@@ -45,56 +37,56 @@ int main(int argc, char *argv[])
     else {
         a.setFont(QFont("Segoe UI", 9, QFont::Normal, false));
     }
+#endif
+#if defined(Q_OS_WIN) || defined(Q_OS_MAC)
     QIcon::setThemeName("Breeze");
 #endif
 
-    QTranslator ssqt5t;
-    ssqt5t.load(QLocale::system(), "ss-qt5", "_", ":/i18n");
-    a.installTranslator(&ssqt5t);
+    QTranslator *ssqt5t = new QTranslator(&a);
+    ssqt5t->load(QLocale::system(), "ss-qt5", "_", ":/i18n");
+    a.installTranslator(ssqt5t);
+}
 
-    MainWindow w;
+int main(int argc, char *argv[])
+{
+    qRegisterMetaTypeStreamOperators<SQProfile>("SQProfile");
+
+    QApplication a(argc, argv);
+    setupApplication(a);
+
+    QCommandLineParser parser;
+    parser.addHelpOption();
+    parser.addVersionOption();
+    QCommandLineOption configFileOption("c",
+                                        "specify configuration file.",
+                                        "config.ini");
+    parser.addOption(configFileOption);
+    parser.process(a);
+
+    QString configFile = parser.value(configFileOption);
+    if (configFile.isEmpty()) {
+#ifdef Q_OS_WIN
+        configFile = a.applicationDirPath() + "/config.ini";
+#else
+        QDir configDir = QDir::homePath() + "/.config/shadowsocks-qt5";
+        configFile = configDir.absolutePath() + "/config.ini";
+        if (!configDir.exists()) {
+            configDir.mkpath(configDir.absolutePath());
+        }
+#endif
+    }
+    ConfigHelper conf(configFile);
+
+    MainWindow w(&conf);
     mainWindow = &w;
 
-    QSharedMemory sharedMem;
-    sharedMem.setKey("Shadowsocks-Qt5");
-    if (w.isOnlyOneInstance()) {
-        qint64 pid = -1;
-        if (sharedMem.create(sizeof(qint64))) {
-            pid = a.applicationPid();
-            if (sharedMem.lock()) {
-                *reinterpret_cast<qint64*>(sharedMem.data()) = pid;
-                sharedMem.unlock();
-            } else {
-                qCritical() << sharedMem.errorString();
-            }
-        } else {
-            if (!sharedMem.attach(QSharedMemory::ReadOnly)) {
-                qCritical() << sharedMem.errorString();
-            }
-            if (sharedMem.lock()) {
-                pid = *reinterpret_cast<qint64*>(sharedMem.data());
-                sharedMem.unlock();
-            } else {
-                qCritical() << sharedMem.errorString();
-            }
-
-#ifdef Q_OS_UNIX
-            //try to send a signal to show previous process's main window
-            if (kill(pid, SIGUSR1) != 0) {
-                QString errStr = QObject::tr("Failed to communicate with previously running instance of Shadowsocks-Qt5 (PID: %1). It might already crashed.").arg(pid);
-                QMessageBox::critical(&w, QObject::tr("Error"), errStr);
-            }
-#else
-            QMessageBox::critical(&w, QObject::tr("Error"), QObject::tr("Another instance of Shadowsocks-Qt5 (PID: %1) is already running.").arg(pid));
-#endif
-            //either way, this process has to quit
-            return -1;
-        }
+    if (conf.isOnlyOneInstance() && w.isInstanceRunning()) {
+        return -1;
     }
 
     w.startAutoStartConnections();
 
-    if (!w.isHideWindowOnStartup()) {
+    if (!conf.isHideWindowOnStartup()) {
         w.show();
     }
 
